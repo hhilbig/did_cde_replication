@@ -1,27 +1,23 @@
 rm(list = ls())
 
-library(foreign)
-library(tidyverse)
-library(foreign)
-library(sandwich)
-library(lmtest)
-library(lfe)
-library(stringr)
-library(haschaR)
-library(pbapply)
-library(RColorBrewer)
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+  foreign,
+  tidyverse,
+  sandwich,
+  lmtest,
+  lfe,
+  gt,
+  stringr,
+  haschaR,
+  pbapply,
+  RColorBrewer,
+  mgcv
+)
 
-## remotes::install_github("mattblackwell/DirectEffects", ref = "assembly-line")
-library(DirectEffects)
-
-
-
-
-## Set working directory conditionally based on user
-if (Sys.info()["user"] == "hanno") {
-  setwd("/Users/hanno/Library/CloudStorage/Dropbox/Harvard/Projects/DiD_DirectEffects/Replication_Data/15_Broockman_Kalla")
-} else {
-  setwd("~/workland/did_cde/Replication_Data/15_Broockman_Kalla/")
+## Install and load DirectEffects from GitHub
+if (!pacman::p_loaded(DirectEffects)) {
+  pacman::p_load_gh("mattblackwell/DirectEffects@assembly-line")
 }
 
 ## ## ##
@@ -147,17 +143,6 @@ M_list_proper <- c(
   "Trans feeling therm. (t_4)"
 )
 
-## Mediators need to be binary
-## This just looks at the medians
-
-M_list %>% lapply(function(x) df[, x] %>% median(na.rm = T))
-M_list %>% lapply(function(x) df[, x] %>% table())
-M_list %>% lapply(function(x) {
-  df[, x] %>%
-    is.na() %>%
-    sum()
-})
-
 ## Function to tranform variable into categorical
 
 make_3cats <- function(v) {
@@ -168,18 +153,21 @@ make_3cats <- function(v) {
   )
 }
 
-## ##
+## Make mediator binary
 
 df <- df %>%
   mutate(mediator_original = therm_trans_t2) %>%
   mutate_at(vars(one_of(M_list)), make_3cats)
 
-## Y_list
+## Define Y_list
 
 Y_list <- c(
   "miami_trans_law_t1_avg_diff", "miami_trans_law_t2_avg_diff",
   "miami_trans_law_t3_avg_diff", "miami_trans_law_t4_avg_diff"
 )
+
+## Define Y_list_proper (proper labels)
+
 Y_list_proper <- c(
   "Trans law support (t_1 - t_0)",
   "Trans law support (t_2 - t_0)",
@@ -245,14 +233,6 @@ est_df$therm_trans_t0 %>%
   hist(main = " Distribution of feeling therm. in t_0")
 median(est_df$therm_trans_t0, na.rm = T)
 
-
-
-## M needs to me discretized
-
-## Load the function
-
-source(file = "../../code/did-cde.R")
-
 ## For testing
 
 y <- Y_list[2]
@@ -280,14 +260,6 @@ est_df <- est_df[complete.cases(df[, c(
   "trans.tolerance.dv.t0"
 )]), ]
 
-## Histogram
-
-est_df %>%
-  ggplot(aes(x = therm_trans_t0)) +
-  geom_histogram(binwidth = 10, fill = "white", color = "black") +
-  xlab("Feeling thermometer (mediator) at baseline, untransformed") +
-  ylab("Frequency") +
-  theme_light(base_family = "Fira Sans")
 
 
 est_df |>
@@ -342,26 +314,33 @@ est_df |>
   gtsave(filename = "figures/therm_joint_dist.tex")
 
 
-# ggsave('figures/Hist_Mediator_Raw.pdf', width = 6, height = 3, device = cairo_pdf)
+# ggsave("figures/Hist_Mediator_Raw.pdf", width = 6, height = 3, device = cairo_pdf)
 
 
-
-median(est_df$therm_trans_t3_diff, na.rm = T)
 
 ## Function
 
-X_list_use <- X_list
-Z_list_use <- Z_list
+# Values below are the ones for which we get an error
+
+n_folds <- 5
+X_list_use <- X_in[[2]]
+Z_list_use <- Z_in[[2]]
+m <- "therm_trans_t2"
+y <- "miami_trans_law_t3_avg_diff"
 
 get_estimates <- function(est_df,
                           X_list_use = X_list,
                           Z_list_use = Z_list,
                           n_folds = 5) {
+  ## Iterate over mediators and outcomes
+
   out_list <- lapply(M_list, function(m) {
     lapply(Y_list, function(y) {
-      cat("Outcome: ", y, "\tMediator: ", m, "\n")
-      ## Drop missings
+      # Print outcome and mediator
 
+      cat("Outcome: ", y, "\tMediator: ", m, "\n")
+
+      # Formula
 
       big_form <- as.formula(paste0(
         y, " ~ treated + base_med + ", m, "+",
@@ -373,21 +352,13 @@ get_estimates <- function(est_df,
 
       ## allows us to use squared terms/interactions
       est_df <- model.frame(big_form, data = df)
-      ## est_df <- est_df[complete.cases(est_df[, c(m,
-      ##                                            'treated',
-      ##                                            y,
-      ##                                            'base_med',
-      ##                                            X_list_use,
-      ##                                            Z_list_use)]),]
 
-      ## Def outcome
+      # Rename outcome to "y"
+      # Remove missings
 
       est_df[, "y"] <- est_df[, y]
       est_df_temp <- est_df %>%
         filter(!is.na(y))
-
-
-      #### Our method ####
 
       ## New Doubly Robust estimator
 
@@ -415,13 +386,14 @@ get_estimates <- function(est_df,
         paste0(Z_list_use, collapse = "+")
       ))
 
+      # Estimate
 
       out_dr_ml <- cde_did_aipw(base_mediator = base_med, trim = c(0.01, 0.99)) |>
         set_treatment(treated) |>
         treat_model(engine = "logit", formula = treated ~ base_med) |>
         outreg_model(engine = "rlasso", y_x_mod, separate = FALSE) |>
         set_treatment(!!m) |>
-        treat_model(engine = "ranger", f_m_mod, separate = FALSE, include_past = FALSE) |>
+        treat_model(engine = "ranger_reg", f_m_mod, separate = FALSE, include_past = FALSE) |>
         outreg_model(engine = "rlasso", y_xz_mod, separate = FALSE, include_past = FALSE) |>
         estimate(y ~ treated, data = est_df_temp, n_folds = n_folds, n_splits = 20)
 
@@ -444,7 +416,7 @@ get_estimates <- function(est_df,
         treat_model(engine = "logit", formula = treated ~ base_med) |>
         outreg_model(engine = "rlasso", y_x_mod, separate = FALSE) |>
         set_treatment(!!m) |>
-        treat_model(engine = "ranger", f_m_gamma_mod, separate = FALSE, include_past = FALSE) |>
+        treat_model(engine = "ranger_reg", f_m_gamma_mod, separate = FALSE, include_past = FALSE) |>
         outreg_model(engine = "rlasso", y_x_gamma_mod, separate = FALSE, include_past = FALSE) |>
         estimate(y ~ treated, data = est_df_temp, n_folds = n_folds, n_splits = 20)
 
@@ -936,11 +908,13 @@ Y_list_proper <- c(
 y <- Y_list[2]
 m <- M_list[1]
 
+X_in
+
 ## Iterate over these
 
 out <- lapply(folds_in, function(folds) {
   lapply(2:4, function(X_id) {
-    cat(folds, X_in_labs[X_id], "\n")
+    cat("Folds: ", folds, "\tCovariates:", X_in_labs[X_id], "\n")
 
     o <- get_estimates(
       est_df = est_df, X_list_use = X_in[[X_id]],
@@ -954,6 +928,7 @@ out <- lapply(folds_in, function(folds) {
     o
   }) %>% reduce(rbind)
 }) %>% reduce(rbind)
+
 
 ## saveRDS(out, file = "data/13_output.rds")
 out <- readRDS("data/13_output.rds")
