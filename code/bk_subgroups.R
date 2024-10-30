@@ -864,7 +864,6 @@ out <- lapply(seq_along(subs), function(sub_g) {
       )
 
       o
-    }) %>% reduce(rbind)
   }) %>% reduce(rbind)
 
   write_rds(out, file = "results/subgroup_output.rds")
