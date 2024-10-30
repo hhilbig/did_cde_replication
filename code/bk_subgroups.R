@@ -12,19 +12,20 @@ pacman::p_load(
   haschaR,
   pbapply,
   RColorBrewer,
-  mgcv
+  mgcv,
+  hdm
 )
 
-## Install and load DirectEffects from GitHub
+# Install and load DirectEffects from GitHub
 if (!pacman::p_loaded(DirectEffects)) {
   pacman::p_load_gh("mattblackwell/DirectEffects@assembly-line")
 }
 
-## ## ##
+# Get data ---------------------------------------------------------------
 
 data <- read_rds("data/bk_clean.rds")
 
-## Bman code
+# Bman code
 
 t0.covariate.names <- c(
   "miami_trans_law_t0", "miami_trans_law2_t0", "therm_trans_t0",
@@ -33,19 +34,20 @@ t0.covariate.names <- c(
   "religious_t0", "exposure_gay_t0", "exposure_trans_t0", "pid_t0", "sdo_scale",
   "gender_norm_daugher_t0", "gender_norm_looks_t0",
   "gender_norm_rights_t0", "therm_afams_t0", "vf_female", "vf_hispanic",
-  "vf_black", "vf_age", "survey_language_es", "cluster_level_t0_scale_mean"
+  "vf_black", "vf_age", "survey_language_es", "cluster_level_t0_scale_mean",
+  "vf_racename"
 )
 
 tX.indices <- colnames(data) %>%
   str_filter("nonconform|trans.tolerance.dv")
 
-## Variables
-## M : vtherm_trans_t
-## D : treat_ind
-## Y : miami_trans_law_t*_avg
-## X :
+# Variables
+# M : vtherm_trans_t
+# D : treat_ind
+# Y : miami_trans_law_t*_avg
+# X :
 
-## Drop some stuff
+# Drop some variables
 
 df <- data %>%
   dplyr::select(
@@ -58,14 +60,12 @@ df <- data %>%
   ) %>%
   mutate(treated = treat_ind)
 
-## Renaming
+# Renaming
 
 df <- df %>%
   dplyr::rename_all(list(~ str_replace(., "norms", "norm")))
 
-colnames(df)
-
-## Need to change everything to be changes
+# Differenced variables
 
 df <- df %>%
   mutate(
@@ -109,9 +109,7 @@ df <- df %>%
     gender_norm_abnormal_t4_diff = gender_norm_abnormal_t4 - gender_norm_abnormal_t0
   )
 
-##
-
-# Start by estimating propensity score models
+# List of covariates --------------------------------------------------------
 
 X_list <- c(
   "gender_norm_sexchange_t0", "gender_norm_moral_t0",
@@ -124,13 +122,16 @@ X_list <- c(
   "vf_age", "survey_language_es",
   "cluster_level_t0_scale_mean"
 )
+
+# Square terms and interactions 
+
 X_cont <- which(lapply(df[, X_list], function(x) length(unique(x))) > 5)
 X_sq_terms <- paste0("I(", X_list[X_cont], " ^ 2)")
 X_int_terms <- outer(X_list, X_list, paste, sep = " * ")
 X_int_terms <- X_int_terms[upper.tri(X_int_terms)]
 X_list_proper <- t0.covariate.names
 
-## Mediator
+# Mediator
 
 M_list <- c(
   "therm_trans_t1", "therm_trans_t2",
@@ -143,7 +144,7 @@ M_list_proper <- c(
   "Trans feeling therm. (t_4)"
 )
 
-## Function to tranform variable into categorical
+# Function to tranform variable into categorical
 
 make_3cats <- function(v) {
   case_when(
@@ -153,21 +154,18 @@ make_3cats <- function(v) {
   )
 }
 
-## Make mediator binary
+# Transform mediator
 
 df <- df %>%
   mutate(mediator_original = therm_trans_t2) %>%
   mutate_at(vars(one_of(M_list)), make_3cats)
 
-## Define Y_list
+# Declare outcomes ---------------------------------------------------------
 
 Y_list <- c(
   "miami_trans_law_t1_avg_diff", "miami_trans_law_t2_avg_diff",
   "miami_trans_law_t3_avg_diff", "miami_trans_law_t4_avg_diff"
 )
-
-## Define Y_list_proper (proper labels)
-
 Y_list_proper <- c(
   "Trans law support (t_1 - t_0)",
   "Trans law support (t_2 - t_0)",
@@ -175,8 +173,7 @@ Y_list_proper <- c(
   "Trans law support (t_4 - t_0)"
 )
 
-## Z_list
-## Just keep this as it is
+# Declare covariates (Z/X) --------------------------------------------------
 
 Z_list <- c(
   "gender_norm_sexchange_t1_diff", "gender_norm_moral_t1_diff",
@@ -193,53 +190,23 @@ Z_list <- c(
   "miami_trans_law_t1_avg_diff", "therm_marijuana_t1"
 )
 
-Z_list %in% colnames(df)
+# Square terms and interactions
 
 Z_sq_terms <- paste0("I(", Z_list, " ^ 2)")
 Z_int_terms <- outer(Z_list, Z_list, paste, sep = " * ")
 Z_int_terms <- Z_int_terms[upper.tri(Z_int_terms)]
 XZ_int_terms <- c(outer(X_list, Z_list, paste, sep = " * "))
 
-## Declare base mediator
+# Base mediator
 
 df <- df %>%
   mutate(base_med = make_3cats(therm_trans_t0))
 
-## Save list of var in excel file
-
-measures <- rbind(
-  data.frame(var = X_list, type = "X"),
-  data.frame(var = Y_list, type = "Y"),
-  data.frame(var = Z_list, type = "Z"),
-  data.frame(var = M_list, type = "M")
-) %>%
-  mutate(label = "") %>%
-  dplyr::select(var, label, type)
-
-##
-
-## library(xlsx)
-
-## write.xlsx(measures, "measures_saved.xlsx", row.names = F)
-
-## Rename
+# Rename the main df
 
 est_df <- df
 
-## Some plots of distribution
-## therm_trans_t2 is what we are using
-
-est_df$therm_trans_t0 %>%
-  hist(main = " Distribution of feeling therm. in t_0")
-median(est_df$therm_trans_t0, na.rm = T)
-
-## For testing
-
-y <- Y_list[2]
-m <- M_list[2]
-n_folds <- 5
-
-## Drop missings
+# Drop missings
 
 sum(complete.cases(df[, c(
   "therm_trans_t2",
@@ -250,7 +217,6 @@ sum(complete.cases(df[, c(
   "trans.tolerance.dv.t0"
 )]))
 
-
 est_df <- est_df[complete.cases(df[, c(
   "therm_trans_t2",
   "treated",
@@ -260,87 +226,27 @@ est_df <- est_df[complete.cases(df[, c(
   "trans.tolerance.dv.t0"
 )]), ]
 
+# Figure 1: Histogram of mediator, untransformed ----------------------------
 
+est_df %>%
+  ggplot(aes(x = therm_trans_t0)) +
+  geom_histogram(binwidth = 10, fill = "white", color = "black") +
+  xlab("Feeling thermometer (mediator) at baseline, untransformed") +
+  ylab("Frequency") +
+  theme_light(base_family = "Fira Sans")
 
-est_df |>
-  filter(!is.na(therm_trans_t2)) |>
-  ggplot(aes(x = as.factor(base_med), y = as.factor(therm_trans_t2))) +
-  geom_bin_2d()
-
-
-est_df |>
-  filter(!is.na(therm_trans_t2)) |>
-  mutate(
-    therm_trans_t2 = recode(therm_trans_t2,
-      `0` = "Cool",
-      `1` = "Neutral",
-      `2` = "Warm"
-    ),
-    base_med = recode(base_med,
-      `0` = "Cool",
-      `1` = "Neutral",
-      `2` = "Warm"
-    )
-  ) |>
-  count(base_med, therm_trans_t2) |>
-  group_by(base_med) |>
-  mutate(
-    perc = n / sum(n)
-  ) |>
-  pivot_wider(
-    names_from = therm_trans_t2,
-    values_from = c(n, perc)
-  ) |>
-  ungroup() |>
-  rename(`Baseline` = "base_med") |>
-  gt(id = "m_joint_dist") |>
-  fmt_percent(starts_with("perc")) |>
-  cols_merge_n_pct(
-    col_n = n_Cool,
-    col_pct = perc_Cool
-  ) |>
-  cols_merge_n_pct(
-    col_n = n_Neutral,
-    col_pct = perc_Neutral
-  ) |>
-  cols_merge_n_pct(
-    col_n = n_Warm,
-    col_pct = perc_Warm
-  ) |>
-  tab_spanner(label = "Wave 2", c(2:4)) |>
-  cols_label_with(
-    fn = ~ gsub("n_", "", .)
-  ) |>
-  gtsave(filename = "figures/therm_joint_dist.tex")
-
-
-# ggsave("figures/Hist_Mediator_Raw.pdf", width = 6, height = 3, device = cairo_pdf)
-
-
-
-## Function
-
-# Values below are the ones for which we get an error
-
-n_folds <- 5
-X_list_use <- X_in[[2]]
-Z_list_use <- Z_in[[2]]
-m <- "therm_trans_t2"
-y <- "miami_trans_law_t3_avg_diff"
+# Function to get estimates ------------------------------------------------
 
 get_estimates <- function(est_df,
                           X_list_use = X_list,
                           Z_list_use = Z_list,
-                          n_folds = 5) {
-  ## Iterate over mediators and outcomes
-
+                          n_folds = 5,
+                          subset = NULL) {
   out_list <- lapply(M_list, function(m) {
     lapply(Y_list, function(y) {
-      # Print outcome and mediator
-
       cat("Outcome: ", y, "\tMediator: ", m, "\n")
+      # Drop missings
 
-      # Formula
 
       big_form <- as.formula(paste0(
         y, " ~ treated + base_med + ", m, "+",
@@ -350,17 +256,20 @@ get_estimates <- function(est_df,
         paste0(Z_list_use, collapse = "+")
       ))
 
-      ## allows us to use squared terms/interactions
-      est_df <- model.frame(big_form, data = df)
+      # allows us to use squared terms/interactions
+      if (!is.null(subset)) {
+        est_df <- model.frame(big_form, data = df, subset = subset)
+      } else {
+        est_df <- model.frame(big_form, data = df)
+      }
 
-      # Rename outcome to "y"
-      # Remove missings
+      # Def outcome
 
       est_df[, "y"] <- est_df[, y]
       est_df_temp <- est_df %>%
         filter(!is.na(y))
-
-      ## New Doubly Robust estimator
+      
+      # New Doubly Robust estimator
 
       y_xz_mod <- as.formula(paste0(
         "~ treated + base_med + ", m, "+",
@@ -376,7 +285,7 @@ get_estimates <- function(est_df,
         )
       ))
 
-      ## Pscore formula
+      # Pscore formula
 
       f_m_mod <- as.formula(paste0(
         m, "~ treated + base_med + ",
@@ -386,14 +295,13 @@ get_estimates <- function(est_df,
         paste0(Z_list_use, collapse = "+")
       ))
 
-      # Estimate
 
       out_dr_ml <- cde_did_aipw(base_mediator = base_med, trim = c(0.01, 0.99)) |>
         set_treatment(treated) |>
         treat_model(engine = "logit", formula = treated ~ base_med) |>
         outreg_model(engine = "rlasso", y_x_mod, separate = FALSE) |>
         set_treatment(!!m) |>
-        treat_model(engine = "ranger_reg", f_m_mod, separate = FALSE, include_past = FALSE) |>
+        treat_model(engine = "ranger_class", f_m_mod, separate = FALSE, include_past = FALSE) |>
         outreg_model(engine = "rlasso", y_xz_mod, separate = FALSE, include_past = FALSE) |>
         estimate(y ~ treated, data = est_df_temp, n_folds = n_folds, n_splits = 20)
 
@@ -416,9 +324,10 @@ get_estimates <- function(est_df,
         treat_model(engine = "logit", formula = treated ~ base_med) |>
         outreg_model(engine = "rlasso", y_x_mod, separate = FALSE) |>
         set_treatment(!!m) |>
-        treat_model(engine = "ranger_reg", f_m_gamma_mod, separate = FALSE, include_past = FALSE) |>
+        treat_model(engine = "ranger_class", f_m_gamma_mod, separate = FALSE, include_past = FALSE) |>
         outreg_model(engine = "rlasso", y_x_gamma_mod, separate = FALSE, include_past = FALSE) |>
         estimate(y ~ treated, data = est_df_temp, n_folds = n_folds, n_splits = 20)
+
 
       # Get estimates for tau
 
@@ -436,7 +345,7 @@ get_estimates <- function(est_df,
       se_dr_m2_ml <- out_dr_ml$estimates["treated_1_2", "std.error"]
 
 
-      ## Gamma
+      # Gamma
 
       est_dr_marginal_gamma_ml <- out_dr_gamma_ml$estimates["treated_1_*", "estimate"]
       se_dr_marginal_gamma_ml <- out_dr_gamma_ml$estimates["treated_1_*", "std.error"]
@@ -470,7 +379,7 @@ get_estimates <- function(est_df,
           "m = Neutral",
           "m = Warm"
         ),
-        n = nrow(est_df),
+        n = out_dr_ml$estimate$DF[c(4, 1, 2, 3)],
         stringsAsFactors = F
       )
 
@@ -493,24 +402,82 @@ get_estimates <- function(est_df,
           "m = Neutral",
           "m = Warm"
         ),
-        n = nrow(est_df),
+        n = out_dr_gamma_ml$estimate$DF[c(4, 1, 2, 3)],
         stringsAsFactors = F
       )
 
-      ## Add to table
+      # Add to table
 
-      if (length(X_list_use) < 100) {
-        #### Effect ####
+      m2 <- felm(
+        as.formula(paste0(
+          "y ~ treated + base_med+",
+          paste0(c(X_list_use %>% setdiff("therm_trans_t0")),
+            collapse = "+"
+          )
+        )),
+        data = est_df_temp
+      )
 
-        m2 <- felm(
-          as.formula(paste0(
-            "y ~ treated + base_med+",
-            paste0(c(X_list_use %>% setdiff("therm_trans_t0")),
-              collapse = "+"
-            )
-          )),
-          data = est_df_temp
-        )
+
+      m2_0 <- felm(
+        as.formula(paste0(
+          "y ~ treated+",
+          paste0(c(X_list_use %>% setdiff("therm_trans_t0")),
+            collapse = "+"
+          )
+        )),
+        data = est_df_temp,
+        subset = base_med == 0
+      )
+      m2_1 <- felm(
+        as.formula(paste0(
+          "y ~ treated+",
+          paste0(c(X_list_use %>% setdiff("therm_trans_t0")),
+            collapse = "+"
+          )
+        )),
+        data = est_df_temp,
+        subset = base_med == 1
+      )
+      m2_2 <- felm(
+        as.formula(paste0(
+          "y ~ treated+",
+          paste0(c(X_list_use %>% setdiff("therm_trans_t0")),
+            collapse = "+"
+          )
+        )),
+        data = est_df_temp,
+        subset = base_med == 2
+      )
+
+      mlist <- list(m2, m2_0, m2_1, m2_2)
+      out_table_2 <- mlist %>%
+        lapply(broom::tidy, conf.int = T) %>%
+        reduce(rbind) %>%
+        filter(str_detect(term, "treated")) %>%
+        mutate(
+          mediator = m,
+          covars = "Yes",
+          intermed_covars = "No",
+          outcome = y,
+          flexible = "No",
+          method = "DiD w/ X, no mediator",
+          base_cond = c(
+            "Marginal",
+            "m = Cool",
+            "m = Neutral",
+            "m = Warm"
+          )
+        ) %>%
+        dplyr::select(
+          estimate, std.error, mediator, covars,
+          intermed_covars, method, flexible, base_cond
+        ) %>%
+        mutate(n = sapply(mlist, function(x) sum(!is.na(x$response))))
+
+      if (FALSE) {
+        # Effect #
+
         m3 <- felm(
           as.formula(paste0(
             "y ~ treated + base_med+",
@@ -538,37 +505,6 @@ get_estimates <- function(est_df,
           data = est_df
         )
 
-
-        m2_0 <- felm(
-          as.formula(paste0(
-            "y ~ treated+",
-            paste0(c(X_list_use %>% setdiff("therm_trans_t0")),
-              collapse = "+"
-            )
-          )),
-          data = est_df_temp,
-          subset = base_med == 0
-        )
-        m2_1 <- felm(
-          as.formula(paste0(
-            "y ~ treated+",
-            paste0(c(X_list_use %>% setdiff("therm_trans_t0")),
-              collapse = "+"
-            )
-          )),
-          data = est_df_temp,
-          subset = base_med == 1
-        )
-        m2_2 <- felm(
-          as.formula(paste0(
-            "y ~ treated+",
-            paste0(c(X_list_use %>% setdiff("therm_trans_t0")),
-              collapse = "+"
-            )
-          )),
-          data = est_df_temp,
-          subset = base_med == 2
-        )
 
         m3_0 <- felm(
           as.formula(paste0(
@@ -655,32 +591,8 @@ get_estimates <- function(est_df,
           subset = base_med == 2
         )
 
-        ##
+        #
 
-        mlist <- list(m2, m2_0, m2_1, m2_2)
-        out_table_2 <- mlist %>%
-          lapply(broom::tidy, conf.int = T) %>%
-          reduce(rbind) %>%
-          filter(str_detect(term, "treated")) %>%
-          mutate(
-            mediator = m,
-            covars = "Yes",
-            intermed_covars = "No",
-            outcome = y,
-            flexible = "No",
-            method = "DiD w/ X, no mediator",
-            base_cond = c(
-              "Marginal",
-              "m = Cool",
-              "m = Neutral",
-              "m = Warm"
-            )
-          ) %>%
-          dplyr::select(
-            estimate, std.error, mediator, covars,
-            intermed_covars, method, flexible, base_cond
-          ) %>%
-          mutate(n = sapply(mlist, function(x) sum(!is.na(x$response))))
 
         mlist <- list(m3, m3_0, m3_1, m3_2)
         out_table_3 <- mlist %>%
@@ -832,7 +744,8 @@ get_estimates <- function(est_df,
           mutate(outcome = y) %>%
           dplyr::select(method, outcome, everything())
       } else {
-        out_table <- df_dr_ml %>%
+        out_table <- out_table_2 %>%
+          bind_rows(df_dr_ml) %>%
           bind_rows(df_dr_gamma_ml) %>%
           mutate_if(is.numeric, round, 3) %>%
           mutate(outcome = y) %>%
@@ -841,11 +754,11 @@ get_estimates <- function(est_df,
 
 
 
-      ## Add
+      # Add
     }) %>% reduce(rbind)
   })
 
-  ## TO DF
+  # TO DF
   out_df <- out_list %>%
     reduce(rbind) %>%
     mutate(method = factor(method, levels = c(
@@ -855,9 +768,11 @@ get_estimates <- function(est_df,
       "ACDE-BC",
       "ACDE-PC"
     )[5:1]))
+
+  return(out_df)
 }
 
-## Def inputs
+# Declare inputs ----------------------------------------------------------
 
 X_in <- list(
   c(X_list, X_sq_terms, X_int_terms),
@@ -875,6 +790,9 @@ X_in <- list(
     "vf_black", "vf_age"
   )
 )
+
+# Covariate labels
+
 X_in_labs <- c(
   "1: All covars + sq terms + ints",
   "2: All covars",
@@ -882,17 +800,23 @@ X_in_labs <- c(
   "4: Only Demographics in X"
 )
 
+# Covariate labels
+
 Z_in <- list(
-  c(Z_list, Z_sq_terms, Z_int_terms, XZ_int_terms),
-  Z_list, Z_list, Z_list
+  Z_list,
+  c(
+    "therm_obama_t1_diff",
+    "trans.tolerance.dv.t1_diff",
+    "gender_nonconformity_t1_diff",
+    "miami_trans_law_t1_avg_diff"
+  )
 )
-Z_in_labs <- c("1: Z - All int. covars")
+Z_in_labs <- c(
+  "1: Z - All int. covars",
+  "2: Z - Indices + Demographics"
+)
 
-folds_in <- c(5)
-
-X_id <- 2
-Z_id <- 2
-folds <- 5
+# Mediators ----------------------------------------------------------------
 
 M_list <- c("therm_trans_t2", "therm_trans_t3")
 M_list_proper <- c(
@@ -908,32 +832,53 @@ Y_list_proper <- c(
 y <- Y_list[2]
 m <- M_list[1]
 
-X_in
+# Subgroups ----------------------------------------------------------------
 
-## Iterate over these
+subs <- list(
+  rep(TRUE, nrow(est_df)),
+  est_df$vf_racename != "Caucasian",
+  est_df$vf_racename == "Caucasian",
+  est_df$vf_female == 1,
+  est_df$vf_female == 0
+)
+subs_labs <- c("All", "Non-white", "White", "Woman", "Non-woman")
 
-out <- lapply(folds_in, function(folds) {
-  lapply(2:4, function(X_id) {
-    cat("Folds: ", folds, "\tCovariates:", X_in_labs[X_id], "\n")
+# Iterate over folds, X, and subgroups --------------------------------------
 
+do_estimate <- FALSE
+
+if (do_estimate) {
+
+out <- lapply(seq_along(subs), function(sub_g) {
+    cat(subs_labs[sub_g], " n = ", sum(subs[[sub_g]]), "\n")
+
+    if (sub_g %in% 2:3) {
+      this_X <- setdiff(X_in[[3]], c("vf_hispanic", "vf_black"))
+    } else if (sub_g %in% 4:5) {
+      this_X <- setdiff(X_in[[3]], c("vf_female"))
+    } else {
+      this_X <- X_in[[3]]
+    }
     o <- get_estimates(
-      est_df = est_df, X_list_use = X_in[[X_id]],
-      Z_list_use = Z_in[[X_id]], n_folds = folds
+      est_df = est_df, X_list_use = this_X,
+      Z_list_use = Z_in[[2L]], n_folds = 5, subset = subs[[sub_g]]
     ) %>%
       mutate(
-        cov_label = X_in_labs[X_id],
-        n_folds = folds
+        cov_label = X_in_labs[3],
+        n_folds = 5,
+        subgroup = subs_labs[sub_g]
       )
 
-    o
+      o
+    }) %>% reduce(rbind)
   }) %>% reduce(rbind)
-}) %>% reduce(rbind)
 
+  write_rds(out, file = "results/subgroup_output.rds")
+} else {
+  out <- read_rds("results/subgroup_output.rds")
+}
 
-## saveRDS(out, file = "data/13_output.rds")
-out <- readRDS("data/13_output.rds")
-
-## Save this for plotting
+# Format for plotting ------------------------------------------------------
 
 out_df_all <- out %>%
   left_join(data.frame(
@@ -973,295 +918,82 @@ out_df_all <- out %>%
     ))
   )
 
-## Fold stuff
+# Table SM.2: ACDE-BC estimates by subgroup -------------------------------
 
-## out_df_all <- out_df_all %>%
-##   mutate(n_folds = ifelse(!str_detect(method, 'DR'),
-##                           'No CV', n_folds)) %>%
-##   distinct(method, n_folds, X_label, Z_label, .keep_all = T)
-
-## Plot
-
-p1 <- ggplot(
-  out_df_all %>% filter(!str_detect(mediator, "tolerance")),
-  aes(x = method, y = estimate, group = flexible)
-) +
-  geom_hline(
-    yintercept = 0, linetype = "dotted",
-    color = "grey60"
-  ) +
-  geom_errorbar(
-    aes(
-      ymin = estimate - 1.96 * std.error,
-      ymax = estimate + 1.96 * std.error,
-      color = flexible
-    ),
-    width = 0, size = 0.25,
-    position = position_dodge(0.4)
-  ) +
-  geom_errorbar(
-    aes(
-      ymin = estimate - 1.645 * std.error,
-      ymax = estimate + 1.645 * std.error,
-      color = flexible
-    ),
-    width = 0, size = 0.75,
-    position = position_dodge(0.4)
-  ) +
-  geom_point(aes(shape = flexible, fill = flexible, color = flexible),
-    size = 2,
-    position = position_dodge(0.4)
-  ) +
-  haschaR::theme_hanno() +
-  xlab("") +
-  ylab("") +
-  facet_grid(~cov_label, space = "free") +
-  coord_flip() +
-  scale_color_discrete(name = "Uses ML?") +
-  scale_shape_discrete(name = "Uses ML?") +
-  scale_fill_discrete(name = "Uses ML?") +
-  ylab("Estimate") +
-  labs(caption = "Thick bars = 90% CIs, Thin bars = 95% CIs\nML-based estimates use LASSO for outcome, random forests for proensity score") +
-  ggtitle("Mediator is trans feeling thermometer between t_0 and t_2\nOutcome is support for anti-disc law between t_0 and t_3")
-p1
-
-
-
-p1 <- ggplot(
-  out_df_all %>% filter(
-    !str_detect(mediator, "tolerance"),
-    method == "ACDE-BC", base_cond == "m = Neutral"
-  ),
-  aes(x = str_wrap(cov_label, 20), y = estimate, group = flexible)
-) +
-  geom_hline(
-    yintercept = 0, linetype = "dotted",
-    color = "grey60"
-  ) +
-  geom_errorbar(
-    aes(
-      ymin = estimate - 1.96 * std.error,
-      ymax = estimate + 1.96 * std.error,
-      color = flexible
-    ),
-    width = 0, size = 0.25,
-    position = position_dodge(0.4)
-  ) +
-  geom_errorbar(
-    aes(
-      ymin = estimate - 1.645 * std.error,
-      ymax = estimate + 1.645 * std.error,
-      color = flexible
-    ),
-    width = 0, size = 0.75,
-    position = position_dodge(0.4)
-  ) +
-  geom_point(aes(shape = flexible, fill = flexible, color = flexible),
-    size = 2,
-    position = position_dodge(0.4)
-  ) +
-  theme_light(base_family = "Fira Sans") +
-  ## haschaR::theme_hanno() +
-  xlab("") +
-  ylab("") +
-  theme(plot.caption.position = "plot") +
-  # coord_flip() +
-  scale_color_discrete(name = "Uses ML?") +
-  scale_shape_discrete(name = "Uses ML?") +
-  scale_fill_discrete(name = "Uses ML?") +
-  ylab("Estimate") +
-  labs(caption = "Thick bars = 90% CIs, Thin bars = 95% CIs\nML-based estimates use LASSO for outcome, random forests for proensity score")
-p1
-
-
-## Save this
-
-# ggsave("figures/ML_comparison.pdf", width = 7, height = 3, device = cairo_pdf)
-
-## Just Indices
-
-
-
-p1 <- out_df_all %>%
+subgroup_table <- out_df_all |>
   filter(
-    !str_detect(mediator, "tolerance"), cov_label == X_in_labs[2],
-    flexible == "Yes" | str_detect(method, "DID"),
-    method != "DID w/ X, Z; no mediator"
+    method %in% c("ACDE-BC", "DID w/ X, no mediator"),
+    (flexible == "Yes" & method == "ACDE-BC") |
+      (flexible == "No" & method == "DID w/ X, no mediator")
   ) |>
-  ggplot(aes(x = base_cond, y = estimate, group = method)) +
-  geom_hline(
-    yintercept = 0, linetype = "dotted",
-    color = "grey60"
-  ) +
-  geom_errorbar(
-    aes(
-      ymin = estimate - 1.96 * std.error,
-      ymax = estimate + 1.96 * std.error,
-      color = method
+  mutate(
+    method = if_else(method == "ACDE-BC", "ACDE_BC", "ATT")
+  ) |>
+  select(method, subgroup, base_cond, estimate, std.error, n) |>
+  pivot_wider(
+    id_cols = c(subgroup, base_cond),
+    names_from = method,
+    values_from = c(estimate, std.error, n)
+  ) |>
+  rename(
+    Subgroup = subgroup, `Baseline Mediator` = base_cond, `ACDE-BC (s.e.)` = estimate_ACDE_BC,
+    `ATT (s.e.)` = estimate_ATT, `n (ACDE)` = n_ACDE_BC, `n (ATT)` = n_ATT
+  ) |>
+  select(Subgroup, `Baseline Mediator`, `ACDE-BC (s.e.)`, `n (ACDE)`, `ATT (s.e.)`, `n (ATT)`, everything()) |>
+  mutate(
+    `ACDE-BC (s.e.)` = ifelse(Subgroup == "White" & `Baseline Mediator` == "m = Cool",
+      NA, `ACDE-BC (s.e.)`
     ),
-    width = 0, size = 0.25,
-    position = position_dodge(0.4)
-  ) +
-  geom_errorbar(
-    aes(
-      ymin = estimate - 1.645 * std.error,
-      ymax = estimate + 1.645 * std.error,
-      color = method
+    `ATT (s.e.)` = ifelse(Subgroup == "White" & `Baseline Mediator` == "m = Cool",
+      NA, `ATT (s.e.)`
+    )
+  )
+subgroup_table
+
+subgroup_table |>
+  gt() |>
+  cols_merge(
+    columns = c(`ACDE-BC (s.e.)`, std.error_ACDE_BC),
+    pattern = "{1} ({2})"
+  ) |>
+  cols_merge(
+    columns = c(`ATT (s.e.)`, std.error_ATT),
+    pattern = "{1} ({2})"
+  ) |>
+  cols_align(
+    align = "left",
+    columns = c(`Baseline Mediator`)
+  ) |>
+  text_replace(
+    locations = cells_body(columns = c(`ACDE-BC (s.e.)`, `ATT (s.e.)`)),
+    pattern = "NA \\(.*\\..*\\)",
+    replacement = "n.a."
+  )
+
+# Table SM.4: ACDE-BC estimates mediator and outcome timing -------------------
+
+time_effects <- out |>
+  filter(
+    method %in% c("ACDE-BC"),
+    flexible == "Yes",
+    base_cond == "m = Neutral",
+    subgroup == "All"
+  ) |>
+  mutate(
+    outcome = case_when(
+      outcome == "miami_trans_law_t4_avg_diff" ~ "t = 4",
+      outcome == "miami_trans_law_t3_avg_diff" ~ "t = 3"
     ),
-    width = 0, size = 0.75,
-    position = position_dodge(0.4)
-  ) +
-  geom_point(aes(shape = method, fill = method, color = method),
-    size = 2,
-    position = position_dodge(0.4)
-  ) +
-  theme_light(base_family = "Fira Sans") +
-  ## haschaR::theme_hanno() +
-  xlab("") +
-  ylab("") +
-  theme(plot.caption.position = "plot") +
-  ## coord_flip() +
-  scale_color_discrete(name = "Estimand Type", type = RColorBrewer::brewer.pal(4, "Dark2")) +
-  scale_shape_discrete(name = "Estimand Type") +
-  scale_fill_discrete(name = "Estimand Type", type = RColorBrewer::brewer.pal(4, "Dark2")) +
-  ylab("Estimate") +
-  labs(caption = "Thick bars = 90% CIs, Thin bars = 95% CIs")
-# ggtitle('Mediator is trans feeling thermometer between t_0 and t_2\nOutcome is support for anti-disc law between t_0 and t_3')
-p1
+    mediator = case_when(
+      mediator == "therm_trans_t2" ~ "t = 2",
+      mediator == "therm_trans_t3" ~ "t = 3"
+    )
+  ) |>
+  filter(!(mediator == "t = 3" & outcome == "t = 3")) |>
+  select(outcome, mediator, estimate, std.error, n) |>
+  rename(
+    `Outcome` = outcome, `Mediator` = mediator,
+    `Estimate` = estimate, `Std. Error` = std.error
+  )
 
-# ggsave("figures/Results_DR_Detail_ML.pdf", width = 7, height = 3, device=cairo_pdf)
-# ggsave("figures/Results_By_Case_Cond.pdf", width = 7, height = 3, device=cairo_pdf)
-
-
-### talk
-
-for (k in 1:4) {
-  p1 <- out_df_all %>%
-    filter(
-      !str_detect(mediator, "tolerance"), cov_label == X_in_labs[2],
-      flexible == "Yes" | str_detect(method, "DID"),
-      method != "DID w/ X, Z; no mediator"
-    ) |>
-    mutate(hide = as.numeric(method %in% levels(method)[1:k])) |>
-    ggplot(aes(x = base_cond, y = estimate, group = method, alpha = hide)) +
-    geom_hline(
-      yintercept = 0, linetype = "dotted",
-      color = "grey60"
-    ) +
-    geom_errorbar(
-      aes(
-        ymin = estimate - 1.96 * std.error,
-        ymax = estimate + 1.96 * std.error,
-        color = method
-      ),
-      width = 0, size = 0.25,
-      position = position_dodge(0.4)
-    ) +
-    geom_errorbar(
-      aes(
-        ymin = estimate - 1.645 * std.error,
-        ymax = estimate + 1.645 * std.error,
-        color = method
-      ),
-      width = 0, size = 0.75,
-      position = position_dodge(0.4)
-    ) +
-    geom_point(aes(shape = method, fill = method, color = method),
-      size = 2,
-      position = position_dodge(0.4)
-    ) +
-    theme_light(base_family = "Fira Sans") +
-    lims(y = c(-1, 1.5)) +
-    ## haschaR::theme_hanno() +
-    xlab("") +
-    ylab("") +
-    theme(plot.caption.position = "plot") +
-    ## coord_flip() +
-    scale_color_discrete(name = "Estimand Type", type = RColorBrewer::brewer.pal(4, "Dark2")) +
-    scale_shape_discrete(name = "Estimand Type") +
-    scale_fill_discrete(name = "Estimand Type", type = RColorBrewer::brewer.pal(4, "Dark2")) +
-    ylab("Estimate") +
-    guides(alpha = "none") +
-    scale_alpha(range = c(0, 1)) +
-    labs(caption = "Thick bars = 90% CIs, Thin bars = 95% CIs")
-  # ggtitle('Mediator is trans feeling thermometer between t_0 and t_2\nOutcome is support for anti-disc law between t_0 and t_3')
-  p1
-  fn <- paste0("figures/talk_figure_", k, ".pdf")
-  ggsave(fn, width = 7, height = 3, device = cairo_pdf)
-}
-
-for (k in 1:3) {
-  p1 <- out_df_all %>%
-    filter(
-      !str_detect(mediator, "tolerance"), cov_label == X_in_labs[2],
-      flexible == "Yes" | str_detect(method, "DID"),
-      method != "DID w/ X, Z; no mediator",
-      method != "ACDE-PC"
-    ) |>
-    mutate(hide = as.numeric(method %in% levels(method)[1:k])) |>
-    ggplot(aes(x = base_cond, y = estimate, group = method, alpha = hide)) +
-    geom_hline(
-      yintercept = 0, linetype = "dotted",
-      color = "grey60"
-    ) +
-    geom_errorbar(
-      aes(
-        ymin = estimate - 1.96 * std.error,
-        ymax = estimate + 1.96 * std.error,
-        color = method
-      ),
-      width = 0, size = 0.25,
-      position = position_dodge(0.4)
-    ) +
-    geom_errorbar(
-      aes(
-        ymin = estimate - 1.645 * std.error,
-        ymax = estimate + 1.645 * std.error,
-        color = method
-      ),
-      width = 0, size = 0.75,
-      position = position_dodge(0.4)
-    ) +
-    geom_point(aes(shape = method, fill = method, color = method),
-      size = 2,
-      position = position_dodge(0.4)
-    ) +
-    theme_light(base_family = "Fira Sans") +
-    lims(y = c(-1, 1.5)) +
-    ## haschaR::theme_hanno() +
-    xlab("") +
-    ylab("") +
-    theme(plot.caption.position = "plot") +
-    ## coord_flip() +
-    scale_color_discrete(name = "Estimand Type", type = RColorBrewer::brewer.pal(4, "Dark2")) +
-    scale_shape_discrete(name = "Estimand Type") +
-    scale_fill_discrete(name = "Estimand Type", type = RColorBrewer::brewer.pal(4, "Dark2")) +
-    ylab("Estimate") +
-    guides(alpha = "none") +
-    scale_alpha(range = c(0, 1)) +
-    labs(caption = "Thick bars = 90% CIs, Thin bars = 95% CIs")
-  # ggtitle('Mediator is trans feeling thermometer between t_0 and t_2\nOutcome is support for anti-disc law between t_0 and t_3')
-  p1
-  fn <- paste0("figures/talk_nopc_figure_", k, ".pdf")
-  ggsave(fn, width = 7, height = 3, device = cairo_pdf)
-}
-
-
-#### Cross tabs ####
-
-
-p_df <- est_df %>% dplyr::select(
-  therm_trans_t2,
-  therm_trans_t3,
-  base_med
-)
-
-tab1 <- table(p_df$base_med, p_df$therm_trans_t2)
-colnames(tab1) <- 1:3 %>% as.character()
-rownames(tab1) <- 1:3 %>% as.character()
-tab1
-
-tab1 <- table(p_df$base_med, p_df$therm_trans_t3)
-colnames(tab1) <- 1:3 %>% as.character()
-rownames(tab1) <- 1:3 %>% as.character()
-tab1
+time_effects
