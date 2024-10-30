@@ -2,7 +2,7 @@
 
 Replication data and code for: "Estimating Controlled Direct Effects with Panel Data: An Application to Reducing Support for Discriminatory Policies"
 
-# List of figures and tables -------------------------------------------------
+# List of figures and tables
 
 - **Figure 1**: Distribution of the mediator at baseline, prior to discretizing.
   - File: `bk_new_pkg.R`
