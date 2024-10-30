@@ -2,15 +2,12 @@ rm(list = ls())
 
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(
-  foreign,
   tidyverse,
   sandwich,
   lmtest,
   lfe,
   gt,
   stringr,
-  haschaR,
-  pbapply,
   RColorBrewer,
   mgcv,
   hdm
@@ -19,6 +16,12 @@ pacman::p_load(
 # Install and load DirectEffects from GitHub
 if (!pacman::p_loaded(DirectEffects)) {
   pacman::p_load_gh("mattblackwell/DirectEffects@assembly-line")
+}
+
+# Function to add line breaks 
+
+add_linebreak_vector <- function(string, ...) {
+  sapply(string, function(s) add_linebreak(s, ...))
 }
 
 # Get data ---------------------------------------------------------------
@@ -225,15 +228,6 @@ est_df <- est_df[complete.cases(df[, c(
   "gender_nonconformity_t0",
   "trans.tolerance.dv.t0"
 )]), ]
-
-# Figure 1: Histogram of mediator, untransformed ----------------------------
-
-est_df %>%
-  ggplot(aes(x = therm_trans_t0)) +
-  geom_histogram(binwidth = 10, fill = "white", color = "black") +
-  xlab("Feeling thermometer (mediator) at baseline, untransformed") +
-  ylab("Frequency") +
-  theme_light(base_family = "Fira Sans")
 
 # Function to get estimates ------------------------------------------------
 
@@ -895,8 +889,8 @@ out_df_all <- out %>%
   ) %>%
   filter(!p_med > p_y) %>%
   mutate(
-    outcome_lab = haschaR::add_linebreak_vector(outcome_lab, min_length = 8),
-    mediator_lab = haschaR::add_linebreak_vector(mediator_lab, min_length = 8)
+    outcome_lab = add_linebreak_vector(outcome_lab, min_length = 8),
+    mediator_lab = add_linebreak_vector(mediator_lab, min_length = 8)
   ) %>%
   filter(p_y == 3 & p_med == 2) %>%
   filter(method != "DiD w/ X, Z; no mediator") %>%

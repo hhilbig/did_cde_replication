@@ -2,14 +2,12 @@ rm(list = ls())
 
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(
-  foreign,
   tidyverse,
   sandwich,
   lmtest,
   lfe,
   gt,
   stringr,
-  pbapply,
   RColorBrewer,
   mgcv,
   hdm
@@ -20,7 +18,13 @@ if (!pacman::p_loaded(DirectEffects)) {
   pacman::p_load_gh("mattblackwell/DirectEffects@assembly-line")
 }
 
-# # #
+# Function to add line breaks
+
+add_linebreak_vector <- function(string, ...) {
+  sapply(string, function(s) add_linebreak(s, ...))
+}
+
+# Get data ----------------------------------------------------------------
 
 data <- read_rds("data/bk_clean.rds")
 
@@ -143,17 +147,7 @@ M_list_proper <- c(
   "Trans feeling therm. (t_4)"
 )
 
-# Function to tranform variable into categorical
-
-make_3cats <- function(v) {
-  case_when(
-    v < 50 ~ 0,
-    v == 50 ~ 1,
-    v > 50 ~ 2
-  )
-}
-
-# Alt function: 5 categories
+# Function: 5 categories
 
 make_5cats <- function(v) {
   case_when(
@@ -547,8 +541,8 @@ out_df_all <- out %>%
   ) %>%
   filter(!p_med > p_y) %>%
   mutate(
-    outcome_lab = haschaR::add_linebreak_vector(outcome_lab, min_length = 8),
-    mediator_lab = haschaR::add_linebreak_vector(mediator_lab, min_length = 8)
+    outcome_lab = add_linebreak_vector(outcome_lab, min_length = 8),
+    mediator_lab = add_linebreak_vector(mediator_lab, min_length = 8)
   ) %>%
   filter(p_y == 3 & p_med == 2) %>%
   filter(method != "DiD w/ X, Z; no mediator") %>%

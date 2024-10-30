@@ -2,15 +2,12 @@ rm(list = ls())
 
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(
-  foreign,
   tidyverse,
   sandwich,
   lmtest,
   lfe,
   gt,
   stringr,
-  haschaR,
-  pbapply,
   RColorBrewer,
   mgcv,
   hdm,
@@ -22,7 +19,13 @@ if (!pacman::p_loaded(DirectEffects)) {
   pacman::p_load_gh("mattblackwell/DirectEffects@assembly-line")
 }
 
-# Get data ---------------------------------------------------------------
+# Function to add line breaks
+
+add_linebreak_vector <- function(string, ...) {
+  sapply(string, function(s) add_linebreak(s, ...))
+}
+
+# Get data ----------------------------------------------------------------
 
 data <- read_rds("data/bk_clean.rds")
 
@@ -239,8 +242,8 @@ out_df_all <- out %>%
   ) %>%
   filter(!p_med > p_y) %>%
   mutate(
-    outcome_lab = haschaR::add_linebreak_vector(outcome_lab, min_length = 8),
-    mediator_lab = haschaR::add_linebreak_vector(mediator_lab, min_length = 8)
+    outcome_lab = add_linebreak_vector(outcome_lab, min_length = 8),
+    mediator_lab = add_linebreak_vector(mediator_lab, min_length = 8)
   ) %>%
   filter(p_y == 3 & p_med == 2) %>%
   filter(method != "DiD w/ X, Z; no mediator") %>%
