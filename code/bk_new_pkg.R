@@ -24,6 +24,34 @@ add_linebreak_vector <- function(string, ...) {
   sapply(string, function(s) add_linebreak(s, ...))
 }
 
+add_linebreak <- function(string, min_length = 10, add_multiple_linebreaks = F) {
+  if (nchar(string) > min_length) {
+    if (!add_multiple_linebreaks) {
+      l <- nchar(string)
+      find_space <- str_locate_all(string, " |\\-") %>%
+        .[[1]] %>%
+        data.frame() %>%
+        pull(start) %>%
+        .[which.min(abs(. -
+          (nchar(string) / 2)))]
+      substr(string, find_space, find_space) <- "\n"
+      string
+    } else {
+      find_space <- str_locate_all(string, " |\\-") %>%
+        .[[1]] %>%
+        data.frame() %>%
+        slice(-1) %>%
+        pull(1)
+      for (i in find_space) {
+        substr(string, i, i) <- "\n"
+      }
+      string
+    }
+  } else {
+    string
+  }
+}
+
 # Get data ----------------------------------------------------------------
 
 data <- read_rds("data/bk_clean.rds")
@@ -41,7 +69,7 @@ t0.covariate.names <- c(
 )
 
 tX.indices <- colnames(data) %>%
-  str_filter("nonconform|trans.tolerance.dv")
+  str_subset("nonconform|trans.tolerance.dv")
 
 # Variables
 # M : vtherm_trans_t
@@ -246,7 +274,7 @@ est_df %>%
 
 # Table 2 -----------------------------------------------------------------
 
-est_df |>
+table_2 <- est_df |>
   filter(!is.na(therm_trans_t2)) |>
   mutate(
     therm_trans_t2 = recode(therm_trans_t2,
@@ -289,6 +317,15 @@ est_df |>
   cols_label_with(
     fn = ~ gsub("n_", "", .)
   )
+
+# Optional save
+
+do_save <- TRUE
+
+if (do_save) {
+  table_2 |>
+    gtsave("/Users/hanno/Library/CloudStorage/Dropbox/Harvard/Projects/DiD_DirectEffects/Replication_Data/15_Broockman_Kalla/figures/therm_joint_dist_new.tex")
+}
 
 # Function to get estimates ------------------------------------------------
 
@@ -881,11 +918,11 @@ Y_list_proper <- c(
 
 # Optionally, get saved results instead of running the code (faster)
 
-do_estimate <- FALSE
+do_estimate <- T
 
 if (do_estimate) {
   out <- lapply(folds_in, function(folds) {
-    lapply(2:4, function(X_id) {
+    lapply(1:4, function(X_id) {
       cat("Folds: ", folds, "\tCovariates:", X_in_labs[X_id], "\n")
 
       o <- get_estimates(
@@ -905,6 +942,7 @@ if (do_estimate) {
 } else {
   out <- read_rds("results/main_output.rds")
 }
+
 
 # Format for plotting ------------------------------------------------------
 
@@ -945,6 +983,8 @@ out_df_all <- out %>%
       "m = Warm"
     ))
   )
+
+# Figure 5: Covariate Comparison ---------------------------------------------
 
 p1 <- ggplot(
   out_df_all %>% filter(
@@ -990,6 +1030,15 @@ p1 <- ggplot(
   ylab("Estimate") +
   labs(caption = "Thick bars = 90% CIs, Thin bars = 95% CIs\nML-based estimates use LASSO for outcome, random forests for proensity score")
 p1
+
+do_save <- TRUE
+
+if (do_save) {
+  ggsave("/Users/hanno/Library/CloudStorage/Dropbox/Harvard/Projects/DiD_DirectEffects/Replication_Data/15_Broockman_Kalla/figures/ML_comparison_new.pdf",
+    width = 7, height = 3,
+    device = cairo_pdf
+  )
+}
 
 # Figure 3: CDE Estimates ----------------------------------------------------
 
@@ -1037,6 +1086,14 @@ p1 <- out_df_all %>%
   ylab("Estimate") +
   labs(caption = "Thick bars = 90% CIs, Thin bars = 95% CIs")
 p1
+
+do_save <- TRUE
+
+if (do_save) {
+  ggsave("/Users/hanno/Library/CloudStorage/Dropbox/Harvard/Projects/DiD_DirectEffects/Replication_Data/15_Broockman_Kalla/figures/Results_By_Case_Cond_new.pdf",
+    width = 7, height = 3, device = cairo_pdf
+  )
+}
 
 # Cross tabs ---------------------------------------------------------------
 

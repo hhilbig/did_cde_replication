@@ -18,10 +18,38 @@ if (!pacman::p_loaded(DirectEffects)) {
   pacman::p_load_gh("mattblackwell/DirectEffects@assembly-line")
 }
 
-# Function to add line breaks 
+# Function to add line breaks
 
 add_linebreak_vector <- function(string, ...) {
   sapply(string, function(s) add_linebreak(s, ...))
+}
+
+add_linebreak <- function(string, min_length = 10, add_multiple_linebreaks = F) {
+  if (nchar(string) > min_length) {
+    if (!add_multiple_linebreaks) {
+      l <- nchar(string)
+      find_space <- str_locate_all(string, " |\\-") %>%
+        .[[1]] %>%
+        data.frame() %>%
+        pull(start) %>%
+        .[which.min(abs(. -
+          (nchar(string) / 2)))]
+      substr(string, find_space, find_space) <- "\n"
+      string
+    } else {
+      find_space <- str_locate_all(string, " |\\-") %>%
+        .[[1]] %>%
+        data.frame() %>%
+        slice(-1) %>%
+        pull(1)
+      for (i in find_space) {
+        substr(string, i, i) <- "\n"
+      }
+      string
+    }
+  } else {
+    string
+  }
 }
 
 # Get data ---------------------------------------------------------------
@@ -42,7 +70,7 @@ t0.covariate.names <- c(
 )
 
 tX.indices <- colnames(data) %>%
-  str_filter("nonconform|trans.tolerance.dv")
+  str_subset("nonconform|trans.tolerance.dv")
 
 # Variables
 # M : vtherm_trans_t
@@ -126,7 +154,7 @@ X_list <- c(
   "cluster_level_t0_scale_mean"
 )
 
-# Square terms and interactions 
+# Square terms and interactions
 
 X_cont <- which(lapply(df[, X_list], function(x) length(unique(x))) > 5)
 X_sq_terms <- paste0("I(", X_list[X_cont], " ^ 2)")
@@ -262,7 +290,7 @@ get_estimates <- function(est_df,
       est_df[, "y"] <- est_df[, y]
       est_df_temp <- est_df %>%
         filter(!is.na(y))
-      
+
       # New Doubly Robust estimator
 
       y_xz_mod <- as.formula(paste0(
@@ -842,8 +870,7 @@ subs_labs <- c("All", "Non-white", "White", "Woman", "Non-woman")
 do_estimate <- FALSE
 
 if (do_estimate) {
-
-out <- lapply(seq_along(subs), function(sub_g) {
+  out <- lapply(seq_along(subs), function(sub_g) {
     cat(subs_labs[sub_g], " n = ", sum(subs[[sub_g]]), "\n")
 
     if (sub_g %in% 2:3) {
@@ -863,7 +890,7 @@ out <- lapply(seq_along(subs), function(sub_g) {
         subgroup = subs_labs[sub_g]
       )
 
-      o
+    o
   }) %>% reduce(rbind)
 
   write_rds(out, file = "results/subgroup_output.rds")
@@ -943,25 +970,33 @@ subgroup_table <- out_df_all |>
   )
 subgroup_table
 
-subgroup_table |>
-  gt() |>
-  cols_merge(
-    columns = c(`ACDE-BC (s.e.)`, std.error_ACDE_BC),
-    pattern = "{1} ({2})"
-  ) |>
-  cols_merge(
-    columns = c(`ATT (s.e.)`, std.error_ATT),
-    pattern = "{1} ({2})"
-  ) |>
-  cols_align(
-    align = "left",
-    columns = c(`Baseline Mediator`)
-  ) |>
-  text_replace(
-    locations = cells_body(columns = c(`ACDE-BC (s.e.)`, `ATT (s.e.)`)),
-    pattern = "NA \\(.*\\..*\\)",
-    replacement = "n.a."
-  )
+# Optional save
+
+do_save <- T
+
+if (do_save) {
+  subgroup_table |>
+    gt() |>
+    cols_merge(
+      columns = c(`ACDE-BC (s.e.)`, std.error_ACDE_BC),
+      pattern = "{1} ({2})"
+    ) |>
+    cols_merge(
+      columns = c(`ATT (s.e.)`, std.error_ATT),
+      pattern = "{1} ({2})"
+    ) |>
+    cols_align(
+      align = "left",
+      columns = c(`Baseline Mediator`)
+    ) |>
+    text_replace(
+      locations = cells_body(columns = c(`ACDE-BC (s.e.)`, `ATT (s.e.)`)),
+      pattern = "NA \\(.*\\..*\\)",
+      replacement = "n.a."
+    ) %>%
+    gtsave("/Users/hanno/Library/CloudStorage/Dropbox/Harvard/Projects/DiD_DirectEffects/Replication_Data/15_Broockman_Kalla/figures/subgroup_effects_new.tex")
+}
+
 
 # Table SM.4: ACDE-BC estimates mediator and outcome timing -------------------
 
@@ -989,4 +1024,10 @@ time_effects <- out |>
     `Estimate` = estimate, `Std. Error` = std.error
   )
 
-time_effects
+# Optional save
+
+if (do_save) {
+  time_effects |>
+    gt() |>
+    gtsave("/Users/hanno/Library/CloudStorage/Dropbox/Harvard/Projects/DiD_DirectEffects/Replication_Data/15_Broockman_Kalla/figures/overtime_effects_new.tex")
+}

@@ -24,6 +24,34 @@ add_linebreak_vector <- function(string, ...) {
   sapply(string, function(s) add_linebreak(s, ...))
 }
 
+add_linebreak <- function(string, min_length = 10, add_multiple_linebreaks = F) {
+  if (nchar(string) > min_length) {
+    if (!add_multiple_linebreaks) {
+      l <- nchar(string)
+      find_space <- str_locate_all(string, " |\\-") %>%
+        .[[1]] %>%
+        data.frame() %>%
+        pull(start) %>%
+        .[which.min(abs(. -
+          (nchar(string) / 2)))]
+      substr(string, find_space, find_space) <- "\n"
+      string
+    } else {
+      find_space <- str_locate_all(string, " |\\-") %>%
+        .[[1]] %>%
+        data.frame() %>%
+        slice(-1) %>%
+        pull(1)
+      for (i in find_space) {
+        substr(string, i, i) <- "\n"
+      }
+      string
+    }
+  } else {
+    string
+  }
+}
+
 # Get data ----------------------------------------------------------------
 
 data <- read_rds("data/bk_clean.rds")
@@ -41,7 +69,7 @@ t0.covariate.names <- c(
 )
 
 tX.indices <- colnames(data) %>%
-  str_filter("nonconform|trans.tolerance.dv")
+  str_subset("nonconform|trans.tolerance.dv")
 
 # Variables
 # M : vtherm_trans_t
@@ -585,17 +613,24 @@ cat5_table <- out_df_all |>
   )
 cat5_table
 
-cat5_table |>
-  gt() |>
-  cols_merge(
-    columns = c(`ACDE-BC (s.e.)`, std.error_ACDE_BC),
-    pattern = "{1} ({2})"
-  ) |>
-  cols_merge(
-    columns = c(`ATT (s.e.)`, std.error_ATT),
-    pattern = "{1} ({2})"
-  ) |>
-  cols_align(
-    align = "left",
-    columns = c(`Baseline Mediator`)
-  )
+# Optional save
+
+do_save <- TRUE
+
+if (do_save) {
+  cat5_table |>
+    gt() |>
+    cols_merge(
+      columns = c(`ACDE-BC (s.e.)`, std.error_ACDE_BC),
+      pattern = "{1} ({2})"
+    ) |>
+    cols_merge(
+      columns = c(`ATT (s.e.)`, std.error_ATT),
+      pattern = "{1} ({2})"
+    ) |>
+    cols_align(
+      align = "left",
+      columns = c(`Baseline Mediator`)
+    ) |>
+    gtsave("/Users/hanno/Library/CloudStorage/Dropbox/Harvard/Projects/DiD_DirectEffects/Replication_Data/15_Broockman_Kalla/figures/cat5_table_new.tex")
+}

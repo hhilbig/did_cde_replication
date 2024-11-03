@@ -25,6 +25,34 @@ add_linebreak_vector <- function(string, ...) {
   sapply(string, function(s) add_linebreak(s, ...))
 }
 
+add_linebreak <- function(string, min_length = 10, add_multiple_linebreaks = F) {
+  if (nchar(string) > min_length) {
+    if (!add_multiple_linebreaks) {
+      l <- nchar(string)
+      find_space <- str_locate_all(string, " |\\-") %>%
+        .[[1]] %>%
+        data.frame() %>%
+        pull(start) %>%
+        .[which.min(abs(. -
+          (nchar(string) / 2)))]
+      substr(string, find_space, find_space) <- "\n"
+      string
+    } else {
+      find_space <- str_locate_all(string, " |\\-") %>%
+        .[[1]] %>%
+        data.frame() %>%
+        slice(-1) %>%
+        pull(1)
+      for (i in find_space) {
+        substr(string, i, i) <- "\n"
+      }
+      string
+    }
+  } else {
+    string
+  }
+}
+
 # Get data ----------------------------------------------------------------
 
 data <- read_rds("data/bk_clean.rds")
@@ -348,7 +376,7 @@ sa_data <- out_df_all |>
     ub_ci_im = imb.man.ci(lb, ub, std.error, std.error, n, alpha = 0.9)[, 2]
   )
 
-# Figure SM.1: Sensitivity analysis -------------------------------------------
+# Figure 4: Sensitivity analysis -------------------------------------------
 
 sa_data |>
   ggplot(aes(x = Gamma, y = lb)) +
@@ -364,6 +392,16 @@ sa_data |>
     nudge_y = -1.25, seed = 1234
   ) +
   labs(x = expression(Gamma), y = "ACDE-PC (m = Neutral)")
+
+# Optional save
+
+do_save <- TRUE
+
+if (do_save) {
+  ggsave("/Users/hanno/Library/CloudStorage/Dropbox/Harvard/Projects/DiD_DirectEffects/Replication_Data/15_Broockman_Kalla/figures/sensitivity_analysis_new.pdf",
+    width = 7, height = 4, device = cairo_pdf
+  )
+}
 
 # Additional quantities -----------------------------------------------------
 
