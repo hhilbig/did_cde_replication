@@ -398,7 +398,7 @@ sa_data |>
 do_save <- TRUE
 
 if (do_save) {
-  ggsave("/Users/hanno/Library/CloudStorage/Dropbox/Harvard/Projects/DiD_DirectEffects/Replication_Data/15_Broockman_Kalla/figures/sensitivity_analysis_new.pdf",
+  ggsave("output/sensitivity_analysis.pdf",
     width = 7, height = 4, device = cairo_pdf
   )
 }
@@ -414,6 +414,15 @@ cov_table |>
 cov_table |>
   filter(q95_abs_diff > sa_data$Gamma[max(which(sa_data$lb > 0))])
 
-df |>
+max_gamma <- sa_data |>
+  filter(lb_ci_im > 0) |>
+  summarize(m_gamma = max(Gamma)) |>
+  pull(m_gamma)
+
+y_sd <- df |>
   filter(base_med == 1, therm_trans_t3 == 1) |>
-  summarize(sd(miami_trans_law_t3_avg_diff))
+  summarize(sd(miami_trans_law_t3_avg_diff)) |>
+  pull()
+
+cat("Maximum gamma with significance: ", max_gamma, "\n")
+cat("Relative to SD of Y: ", max_gamma / y_sd, "\n")

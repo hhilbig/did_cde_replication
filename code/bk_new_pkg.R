@@ -1,4 +1,5 @@
 rm(list = ls())
+do_save <- TRUE
 
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(
@@ -265,12 +266,20 @@ est_df <- est_df[complete.cases(df[, c(
 
 # Figure 1: Histogram of mediator, untransformed ----------------------------
 
-est_df %>%
+figure_1 <- est_df %>%
   ggplot(aes(x = therm_trans_t0)) +
   geom_histogram(binwidth = 10, fill = "white", color = "black") +
   xlab("Feeling thermometer (mediator) at baseline, untransformed") +
   ylab("Frequency") +
   theme_light(base_family = "Fira Sans")
+figure_1
+
+
+if (do_save) {
+  ggsave("output/hist_mediator_raw.pdf",
+    width = 6, height = 3, device = cairo_pdf
+  )
+}
 
 # Table 2 -----------------------------------------------------------------
 
@@ -324,7 +333,8 @@ do_save <- TRUE
 
 if (do_save) {
   table_2 |>
-    gtsave("/Users/hanno/Library/CloudStorage/Dropbox/Harvard/Projects/DiD_DirectEffects/Replication_Data/15_Broockman_Kalla/figures/therm_joint_dist_new.tex")
+    tab_options(latex.use_longtable = TRUE) |>
+    gtsave("output/therm_joint_dist.tex")
 }
 
 # Function to get estimates ------------------------------------------------
@@ -1028,13 +1038,13 @@ p1 <- ggplot(
   scale_shape_discrete(name = "Uses ML?") +
   scale_fill_discrete(name = "Uses ML?") +
   ylab("Estimate") +
-  labs(caption = "Thick bars = 90% CIs, Thin bars = 95% CIs\nML-based estimates use LASSO for outcome, random forests for proensity score")
+  labs(caption = "Thick bars = 90% CIs, Thin bars = 95% CIs\nML-based estimates use LASSO for outcome, random forests for propensity score")
 p1
 
 do_save <- TRUE
 
 if (do_save) {
-  ggsave("/Users/hanno/Library/CloudStorage/Dropbox/Harvard/Projects/DiD_DirectEffects/Replication_Data/15_Broockman_Kalla/figures/ML_comparison_new.pdf",
+  ggsave("output/ml_comparison.pdf",
     width = 7, height = 3,
     device = cairo_pdf
   )
@@ -1090,7 +1100,7 @@ p1
 do_save <- TRUE
 
 if (do_save) {
-  ggsave("/Users/hanno/Library/CloudStorage/Dropbox/Harvard/Projects/DiD_DirectEffects/Replication_Data/15_Broockman_Kalla/figures/Results_By_Case_Cond_new.pdf",
+  ggsave("output/main_results.pdf",
     width = 7, height = 3, device = cairo_pdf
   )
 }

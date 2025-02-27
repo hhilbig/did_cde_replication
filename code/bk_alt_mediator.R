@@ -632,5 +632,6 @@ if (do_save) {
       align = "left",
       columns = c(`Baseline Mediator`)
     ) |>
-    gtsave("/Users/hanno/Library/CloudStorage/Dropbox/Harvard/Projects/DiD_DirectEffects/Replication_Data/15_Broockman_Kalla/figures/cat5_table_new.tex")
+    tab_options(latex.use_longtable = TRUE) |>
+    gtsave("output/cat5_table.tex")
 }

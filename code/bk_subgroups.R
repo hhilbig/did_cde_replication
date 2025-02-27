@@ -994,7 +994,8 @@ if (do_save) {
       pattern = "NA \\(.*\\..*\\)",
       replacement = "n.a."
     ) %>%
-    gtsave("/Users/hanno/Library/CloudStorage/Dropbox/Harvard/Projects/DiD_DirectEffects/Replication_Data/15_Broockman_Kalla/figures/subgroup_effects_new.tex")
+    tab_options(latex.use_longtable = TRUE) |>
+    gtsave("output/subgroup_effects.tex")
 }
 
 
@@ -1029,5 +1030,6 @@ time_effects <- out |>
 if (do_save) {
   time_effects |>
     gt() |>
-    gtsave("/Users/hanno/Library/CloudStorage/Dropbox/Harvard/Projects/DiD_DirectEffects/Replication_Data/15_Broockman_Kalla/figures/overtime_effects_new.tex")
+    tab_options(latex.use_longtable = TRUE) |>
+    gtsave("output/overtime_effects.tex")
 }
